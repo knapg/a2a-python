@@ -15,6 +15,7 @@ from a2a.client.errors import (
     A2AClientJSONError,
     A2AClientTimeoutError,
 )
+from a2a.client.helpers import parse_agent_card
 from a2a.client.middleware import ClientCallContext, ClientCallInterceptor
 from a2a.client.transports.base import ClientTransport
 from a2a.extensions.common import update_extension_header
@@ -478,7 +479,7 @@ class RestTransport(ClientTransport):
         response_data = await self._send_get_request(
             '/v1/card', {}, modified_kwargs
         )
-        response: AgentCard = ParseDict(response_data, AgentCard())
+        response: AgentCard = parse_agent_card(response_data)
 
         if signature_verifier:
             signature_verifier(response)

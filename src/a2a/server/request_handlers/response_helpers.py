@@ -6,6 +6,7 @@ from google.protobuf.json_format import MessageToDict
 from google.protobuf.message import Message as ProtoMessage
 from jsonrpc.jsonrpc2 import JSONRPC20Response
 
+from a2a.compat.v0_3.conversions import to_compat_agent_card
 from a2a.server.jsonrpc_models import (
     InternalError as JSONRPCInternalError,
 )
@@ -13,6 +14,7 @@ from a2a.server.jsonrpc_models import (
     JSONRPCError,
 )
 from a2a.types.a2a_pb2 import (
+    AgentCard,
     ListTasksResponse,
     Message,
     StreamResponse,
@@ -87,6 +89,43 @@ EventTypes = (
     | ListTasksResponse
 )
 """Type alias for possible event types produced by handlers."""
+
+
+def agent_card_to_dict(
+    card: AgentCard, preserving_proto_field_name: bool = False
+) -> dict[str, Any]:
+    """Convert AgentCard to dict and inject backward compatibility fields."""
+    result = MessageToDict(
+        card, preserving_proto_field_name=preserving_proto_field_name
+    )
+
+    compat_card = to_compat_agent_card(card)
+    compat_dict = compat_card.model_dump(
+        by_alias=not preserving_proto_field_name, exclude_none=True
+    )
+
+    # Do not include supportsAuthenticatedExtendedCard if false
+    key = (
+        'supports_authenticated_extended_card'
+        if preserving_proto_field_name
+        else 'supportsAuthenticatedExtendedCard'
+    )
+    if not compat_dict.get(key):
+        compat_dict.pop(key, None)
+
+    def merge(dict1: dict[str, Any], dict2: dict[str, Any]) -> dict[str, Any]:
+        for k, v in dict2.items():
+            if k not in dict1:
+                dict1[k] = v
+            elif isinstance(v, dict) and isinstance(dict1[k], dict):
+                merge(dict1[k], v)
+            elif isinstance(v, list) and isinstance(dict1[k], list):
+                for i in range(min(len(dict1[k]), len(v))):
+                    if isinstance(dict1[k][i], dict) and isinstance(v[i], dict):
+                        merge(dict1[k][i], v[i])
+        return dict1
+
+    return merge(result, compat_dict)
 
 
 def build_error_response(
