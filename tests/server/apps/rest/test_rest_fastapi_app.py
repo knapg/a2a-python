@@ -398,3 +398,44 @@ async def test_send_message_rejected_task(
 
 if __name__ == '__main__':
     pytest.main([__file__])
+
+
+@pytest.mark.anyio
+async def test_send_message_invalid_json(client: AsyncClient) -> None:
+    # Send malformed JSON payload
+    response = await client.post('/v1/message:send', content=b"invalid json")
+    
+    # We expect HTTP 400 status instead of 500 when JSON parsing fails
+    assert response.status_code == 400
+    assert response.headers.get("content-type") == "application/problem+json"
+    
+    problem = response.json()
+    assert problem["status"] == 400
+    assert "Invalid JSON payload" in problem["detail"]
+
+
+@pytest.mark.anyio
+async def test_get_task_invalid_history_length(client: AsyncClient) -> None:
+    # Test GET /v1/tasks/{id}?historyLength=invalid
+    response = await client.get('/v1/tasks/123?historyLength=invalid_integer')
+    
+    assert response.status_code == 400
+    assert response.headers.get("content-type") == "application/problem+json"
+    
+    problem = response.json()
+    assert problem["status"] == 400
+    assert "'historyLength' must be an integer" in problem["detail"]
+
+
+@pytest.mark.anyio
+async def test_list_tasks_invalid_query_params(client: AsyncClient) -> None:
+    # `pageSize` is typically an int32 across most protobuf requests.
+    response = await client.get('/v1/tasks?pageSize=invalid_integer')
+    
+    assert response.status_code == 400
+    assert response.headers.get("content-type") == "application/problem+json"
+    
+    problem = response.json()
+    assert problem["status"] == 400
+    assert "Invalid query parameters" in problem["detail"]
+

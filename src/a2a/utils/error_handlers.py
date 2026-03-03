@@ -74,6 +74,33 @@ A2AErrorToHttpStatus: dict[_A2AErrorType, int] = {
     AuthenticatedExtendedCardNotConfiguredError: 404,
 }
 
+A2AErrorToTypeURI: dict[_A2AErrorType, str] = {
+    TaskNotFoundError: "https://a2a-protocol.org/errors/task-not-found",
+    TaskNotCancelableError: "https://a2a-protocol.org/errors/task-not-cancelable",
+    PushNotificationNotSupportedError: "https://a2a-protocol.org/errors/push-notification-not-supported",
+    UnsupportedOperationError: "https://a2a-protocol.org/errors/unsupported-operation",
+    ContentTypeNotSupportedError: "https://a2a-protocol.org/errors/content-type-not-supported",
+    InvalidAgentResponseError: "https://a2a-protocol.org/errors/invalid-agent-response",
+    AuthenticatedExtendedCardNotConfiguredError: "https://a2a-protocol.org/errors/extended-agent-card-not-configured",
+}
+
+A2AErrorToTitle: dict[_A2AErrorType, str] = {
+    JSONRPCError: "JSON RPC Error",
+    JSONParseError: "JSON Parse Error",
+    InvalidRequestError: "Invalid Request Error",
+    MethodNotFoundError: "Method Not Found Error",
+    InvalidParamsError: "Invalid Params Error",
+    InternalError: "Internal Error",
+    JSONRPCInternalError: "Internal Error",
+    TaskNotFoundError: "Task Not Found",
+    TaskNotCancelableError: "Task Not Cancelable",
+    PushNotificationNotSupportedError: "Push Notification Not Supported",
+    UnsupportedOperationError: "Unsupported Operation",
+    ContentTypeNotSupportedError: "Content Type Not Supported",
+    InvalidAgentResponseError: "Invalid Agent Response",
+    AuthenticatedExtendedCardNotConfiguredError: "Extended Agent Card Not Configured",
+}
+
 
 def rest_error_handler(
     func: Callable[..., Awaitable[Response]],
@@ -85,9 +112,10 @@ def rest_error_handler(
         try:
             return await func(*args, **kwargs)
         except A2AError as error:
-            http_code = A2AErrorToHttpStatus.get(
-                cast('_A2AErrorType', type(error)), 500
-            )
+            error_type = cast('_A2AErrorType', type(error))
+            http_code = A2AErrorToHttpStatus.get(error_type, 500)
+            type_uri = A2AErrorToTypeURI.get(error_type, "about:blank")
+            title = A2AErrorToTitle.get(error_type, error.__class__.__name__)
 
             log_level = (
                 logging.ERROR
@@ -103,19 +131,37 @@ def rest_error_handler(
                 if getattr(error, 'data', None)
                 else '',
             )
-            # TODO(#722): Standardize error response format.
+            
+            payload = {
+                "type": type_uri,
+                "title": title,
+                "status": http_code,
+                "detail": getattr(error, 'message', str(error)),
+            }
+            
+            data = getattr(error, 'data', None)
+            if isinstance(data, dict):
+                # Add data elements as extension fields in the problem details object
+                for key, value in data.items():
+                    if key not in payload:
+                        payload[key] = value
+
             return JSONResponse(
-                content={
-                    'message': getattr(error, 'message', str(error)),
-                    'type': type(error).__name__,
-                },
+                content=payload,
                 status_code=http_code,
+                media_type="application/problem+json",
             )
         except Exception:
             logger.exception('Unknown error occurred')
             return JSONResponse(
-                content={'message': 'unknown exception', 'type': 'Exception'},
+                content={
+                    "type": "about:blank",
+                    "title": "Internal Error",
+                    "status": 500,
+                    "detail": "unknown exception",
+                },
                 status_code=500,
+                media_type="application/problem+json"
             )
 
     return wrapper

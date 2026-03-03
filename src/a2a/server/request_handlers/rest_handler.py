@@ -8,6 +8,7 @@ from google.protobuf.json_format import (
     MessageToJson,
     Parse,
     ParseDict,
+    ParseError,
 )
 
 
@@ -31,7 +32,7 @@ from a2a.types.a2a_pb2 import (
     SubscribeToTaskRequest,
 )
 from a2a.utils import proto_utils
-from a2a.utils.errors import TaskNotFoundError
+from a2a.utils.errors import InvalidParamsError, JSONParseError, TaskNotFoundError
 from a2a.utils.helpers import validate
 from a2a.utils.telemetry import SpanKind, trace_class
 
@@ -80,7 +81,10 @@ class RESTHandler:
         """
         body = await request.body()
         params = a2a_pb2.SendMessageRequest()
-        Parse(body, params)
+        try:
+            Parse(body, params)
+        except ParseError as e:
+            raise JSONParseError(message=f"Invalid JSON payload: {e}")
         task_or_message = await self.request_handler.on_message_send(
             params, context
         )
@@ -113,7 +117,10 @@ class RESTHandler:
         """
         body = await request.body()
         params = a2a_pb2.SendMessageRequest()
-        Parse(body, params)
+        try:
+            Parse(body, params)
+        except ParseError as e:
+            raise JSONParseError(message=f"Invalid JSON payload: {e}")
         async for event in self.request_handler.on_message_send_stream(
             params, context
         ):
@@ -223,7 +230,10 @@ class RESTHandler:
         task_id = request.path_params['id']
         body = await request.body()
         params = a2a_pb2.CreateTaskPushNotificationConfigRequest()
-        Parse(body, params)
+        try:
+            Parse(body, params)
+        except ParseError as e:
+            raise JSONParseError(message=f"Invalid JSON payload: {e}")
         # Set the parent to the task resource name format
         params.task_id = task_id
         config = (
@@ -249,7 +259,10 @@ class RESTHandler:
         """
         task_id = request.path_params['id']
         history_length_str = request.query_params.get('historyLength')
-        history_length = int(history_length_str) if history_length_str else None
+        try:
+            history_length = int(history_length_str) if history_length_str else None
+        except ValueError:
+            raise InvalidParamsError(message="'historyLength' must be an integer")
         params = GetTaskRequest(id=task_id, history_length=history_length)
         task = await self.request_handler.on_get_task(params, context)
         if task:
@@ -298,9 +311,12 @@ class RESTHandler:
         # Parse query params, keeping arrays/repeated fields in mind if there are any
         # Using a simple ParseDict for now, might need more robust query param parsing
         # if the request structure contains nested or repeated elements
-        ParseDict(
-            dict(request.query_params), params, ignore_unknown_fields=True
-        )
+        try:
+            ParseDict(
+                dict(request.query_params), params, ignore_unknown_fields=True
+            )
+        except ParseError as e:
+            raise InvalidParamsError(message=f"Invalid query parameters: {e}")
         result = await self.request_handler.on_list_tasks(params, context)
         return MessageToDict(result)
 
@@ -322,9 +338,12 @@ class RESTHandler:
         params = a2a_pb2.ListTaskPushNotificationConfigsRequest(task_id=task_id)
 
         # Parse query params, keeping arrays/repeated fields in mind if there are any
-        ParseDict(
-            dict(request.query_params), params, ignore_unknown_fields=True
-        )
+        try:
+            ParseDict(
+                dict(request.query_params), params, ignore_unknown_fields=True
+            )
+        except ParseError as e:
+            raise InvalidParamsError(message=f"Invalid query parameters: {e}")
 
         result = (
             await self.request_handler.on_list_task_push_notification_configs(
