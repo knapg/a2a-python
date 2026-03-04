@@ -105,7 +105,7 @@ class RestTransport(ClientTransport):
             message = error_data.get('message', str(e))
 
             if isinstance(error_type, str):
-                # TODO(#723): Resolving imports by name is a temporary hack until proper error handling structure is added in #723.
+                # TODO(#723): Resolving imports by name is temporary until proper error handling structure is added in #723.
                 exception_cls = _A2A_ERROR_NAME_TO_CLS.get(error_type)
                 if exception_cls:
                     raise exception_cls(message) from e
@@ -309,7 +309,7 @@ class RestTransport(ClientTransport):
         payload = MessageToDict(request)
         modified_kwargs = update_extension_header(
             self._get_http_args(context),
-            extensions if extensions not in (None, []) else self.extensions,
+            extensions if extensions is not None else self.extensions,
         )
         payload, modified_kwargs = await self._apply_interceptors(
             payload,

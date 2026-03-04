@@ -56,7 +56,7 @@ def _map_grpc_error(e: grpc.aio.AioRpcError) -> NoReturn:
     details = e.details()
     if isinstance(details, str) and ': ' in details:
         error_type_name, error_message = details.split(': ', 1)
-        # TODO(#723): Resolving imports by name is a temporary hack until proper error handling structure is added in #723.
+        # TODO(#723): Resolving imports by name is temporary until proper error handling structure is added in #723.
         exception_cls = _A2A_ERROR_NAME_TO_CLS.get(error_type_name)
         if exception_cls:
             raise exception_cls(error_message) from e
